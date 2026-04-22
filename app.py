@@ -8,7 +8,7 @@ st.set_page_config(page_title="Sistema de Pedidos", page_icon="📝")
 st.title("📝 Registro de Pedidos")
 
 # URL de tu hoja (la misma que pusiste en Secrets)
-URL_HOJA = "https://docs.google.com/spreadsheets/d/1zc4xSypiN1mmDZghgrCmn2ItzZVjLYBsUxw1VHetIB8/edit?pli=1#gid=0"
+URL_HOJA = "https://docs.google.com/spreadsheets/d/1zc4xSypiN1mmDZghgrCmn2ItzZVjLYBsUxw1VHetIB8/edit#gid=0"
 
 # Establecer conexión
 conn = st.connection("gsheets", type=GSheetsConnection)
