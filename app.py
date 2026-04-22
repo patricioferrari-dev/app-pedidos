@@ -1,17 +1,17 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+from streamlit_gsheets import GSheetsConnection
 
-# Configuración de la página
-st.set_page_config(page_title="Pedidos de Materiales", page_icon="📝")
+# Configuración de página
+st.set_page_config(page_title="Pedidos a Google Sheets", page_icon="📊")
 
-st.title("📝 Sistema de Pedidos de Materiales")
+st.title("📊 Registro de Pedidos en Google Sheets")
 
-# Inicializar una lista de pedidos en la memoria de la app
-if 'pedidos' not in st.session_state:
-    st.session_state.pedidos = []
+# Crear conexión con la hoja de cálculo
+conn = st.connection("gsheets", type=GSheetsConnection)
 
-# Formulario de entrada
+# Formulario
 with st.form("nuevo_pedido"):
     st.subheader("Realizar Nuevo Pedido")
     material = st.text_input("Nombre del Material")
@@ -19,32 +19,51 @@ with st.form("nuevo_pedido"):
     prioridad = st.selectbox("Prioridad", ["Baja", "Media", "Alta"])
     solicitante = st.text_input("Nombre del Solicitante")
     
-    boton_pedido = st.form_submit_button("Enviar Pedido")
+    boton_pedido = st.form_submit_button("Guardar en Google Sheets")
 
     if boton_pedido:
         if material and solicitante:
-            nuevo_item = {
+            # 1. Crear el nuevo registro
+            nuevo_registro = pd.DataFrame([{
                 "Fecha": datetime.now().strftime("%Y-%m-%d %H:%M"),
                 "Solicitante": solicitante,
                 "Material": material,
                 "Cantidad": cantidad,
                 "Prioridad": prioridad
-            }
-            st.session_state.pedidos.append(nuevo_item)
-            st.success("✅ Pedido registrado exitosamente.")
+            }])
+
+            try:
+                # 2. Leer datos actuales de la nube
+                datos_actuales = conn.read()
+                
+                # 3. Concatenar (unir) el nuevo registro
+                # Si la hoja estaba vacía, simplemente usamos el nuevo_registro
+                if datos_actuales is not None:
+                    df_final = pd.concat([datos_actuales, nuevo_registro], ignore_index=True)
+                else:
+                    df_final = nuevo_registro
+                
+                # 4. Actualizar la hoja de Google
+                conn.update(data=df_final)
+                
+                st.success("✅ ¡Pedido guardado en Google Drive!")
+                st.balloons()
+            except Exception as e:
+                st.error(f"Error de conexión: {e}")
         else:
-            st.error("⚠️ Por favor, completa todos los campos.")
+            st.error("⚠️ Completa todos los campos.")
 
-# Mostrar los pedidos registrados
+# --- VISUALIZACIÓN ---
 st.divider()
-st.subheader("📋 Lista de Pedidos Actuales")
+st.subheader("📋 Historial de Pedidos (Desde la Nube)")
 
-if st.session_state.pedidos:
-    df = pd.DataFrame(st.session_state.pedidos)
-    st.dataframe(df, use_container_width=True)
-    
-    # Botón para descargar como CSV
-    csv = df.to_csv(index=False).encode('utf-8')
-    st.download_button("Descargar Pedidos (CSV)", csv, "pedidos.csv", "text/csv")
-else:
-    st.info("No hay pedidos registrados todavía.")
+try:
+    # Leer y mostrar los datos actualizados
+    df_nube = conn.read()
+    if not df_nube.empty:
+        # Mostramos los últimos pedidos primero
+        st.dataframe(df_nube.iloc[::-1], use_container_width=True, hide_index=True)
+    else:
+        st.info("La base de datos está vacía.")
+except:
+    st.warning("Aún no hay datos para mostrar.")
