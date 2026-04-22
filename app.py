@@ -3,71 +3,97 @@ import pandas as pd
 from datetime import datetime
 from streamlit_gsheets import GSheetsConnection
 
-st.set_page_config(page_title="Control de Materiales", page_icon="📦")
+st.set_page_config(page_title="Sistema de Inventario", layout="wide")
 
-st.title("📦 Control de Materiales")
-
-# URL de tu hoja (Asegúrate de que sea la misma)
+# URL de tu hoja
 URL_HOJA = "https://docs.google.com/spreadsheets/d/1zc4xSypiN1mmDZghgrCmn2ItzZVjLYBsUxw1VHetIB8/edit#gid=0"
 
-# Establecer conexión
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# --- FORMULARIO DE REGISTRO ---
-with st.form("nuevo_registro"):
-    st.subheader("Nuevo Movimiento")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        tipo = st.selectbox("Tipo de ingreso", 
-                            ["Pedido de materiales", "Devolucion por fallas", "Otros"])
-    with col2:
-        cantidad = st.number_input("Cantidad", min_value=1, step=1)
-    
-    codigo = st.text_input("Código del Producto").upper().strip()
-    descripcion = st.text_area("Descripción del Material")
-    
-    submit = st.form_submit_button("Registrar en Base de Datos")
+# --- CARGA DE CATÁLOGO ---
+@st.cache_data(ttl=600) # Guarda el catálogo 10 min en memoria para que sea rápido
+def cargar_catalogo():
+    try:
+        # Lee la pestaña "Productos"
+        return conn.read(spreadsheet=URL_HOJA, worksheet="Productos")
+    except:
+        return pd.DataFrame(columns=["Codigo", "Descripcion"])
 
-    if submit:
-        if codigo and descripcion:
-            # Crear el nuevo registro con tus nuevas columnas
-            nuevo_dato = pd.DataFrame([{
-                "Fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
-                "Tipo": tipo,
-                "Codigo": codigo,
-                "Descripcion": descripcion,
-                "Cantidad": cantidad
-            }])
+df_catalogo = cargar_catalogo()
 
-            try:
-                # 1. Leer datos existentes
-                df_existente = conn.read(spreadsheet=URL_HOJA, ttl=0)
-                
-                # 2. Combinar
-                df_actualizado = pd.concat([df_existente, nuevo_dato], ignore_index=True)
-                
-                # 3. Guardar
-                conn.update(spreadsheet=URL_HOJA, data=df_actualizado)
-                
-                st.success(f"✅ ¡{codigo} registrado correctamente!")
-                st.balloons()
-            except Exception as e:
-                st.error(f"Error al guardar: {e}")
-        else:
-            st.warning("⚠️ Por favor, ingresa el Código y la Descripción.")
+st.title("📦 Gestión de Materiales")
 
-# --- VISUALIZACIÓN DE DATOS ---
+# --- FILA 1: FECHA Y TIPO ---
+col_fecha, col_tipo = st.columns(2)
+fecha_auto = datetime.now().strftime("%d/%m/%Y %H:%M")
+
+with col_fecha:
+    st.info(f"**Fecha actual:** {fecha_auto}")
+
+with col_tipo:
+    tipo_movimiento = st.selectbox(
+        "Tipo de movimiento",
+        ["Pedido de materiales", "Devolucion por fallas", "Otros"],
+        label_visibility="collapsed"
+    )
+
 st.divider()
-st.subheader("📋 Historial de Movimientos")
 
-try:
-    # Leer para mostrar
-    datos = conn.read(spreadsheet=URL_HOJA, ttl=0)
-    if not datos.empty:
-        # Ordenar para que el último registro aparezca arriba
-        st.dataframe(datos.iloc[::-1], use_container_width=True, hide_index=True)
+# --- FILA 2: CÓDIGO, DESCRIPCIÓN, CANTIDAD Y BOTÓN ---
+# Usamos columnas para que quede todo en una línea "Abajo"
+c1, c2, c3, c4 = st.columns([2, 4, 2, 2])
+
+with c1:
+    codigo_input = st.text_input("Código", placeholder="Ej: PER-01").upper().strip()
+
+# Lógica de búsqueda automática
+descripcion_auto = ""
+if codigo_input:
+    resultado = df_catalogo[df_catalogo["Codigo"] == codigo_input]
+    if not resultado.empty:
+        descripcion_auto = resultado.iloc[0]["Descripcion"]
     else:
-        st.info("No hay registros en la base de datos.")
-except Exception as e:
-    st.info("Esperando los primeros datos...")
+        descripcion_auto = "⚠️ Código no encontrado"
+
+with c2:
+    # Mostramos la descripción (deshabilitada para que no se borre la lógica)
+    st.text_input("Descripción", value=descripcion_auto, disabled=True)
+
+with c3:
+    cantidad_input = st.number_input("Cantidad", min_value=0, step=1)
+
+with c4:
+    st.write(" ") # Espacio para alinear con los inputs
+    boton_cargar = st.button("🚀 Cargar", use_container_width=True)
+
+# --- LÓGICA DE CARGA ---
+if boton_cargar:
+    if codigo_input and "⚠️" not in descripcion_auto and cantidad_input > 0:
+        nuevo_registro = pd.DataFrame([{
+            "Fecha": fecha_auto,
+            "Tipo": tipo_movimiento,
+            "Codigo": codigo_input,
+            "Descripcion": descripcion_auto,
+            "Cantidad": cantidad_input
+        }])
+        
+        try:
+            df_existente = conn.read(spreadsheet=URL_HOJA, worksheet="Hoja1", ttl=0)
+            df_final = pd.concat([df_existente, nuevo_registro], ignore_index=True)
+            conn.update(spreadsheet=URL_HOJA, worksheet="Hoja1", data=df_final)
+            
+            st.toast(f"¡{codigo_input} cargado con éxito!", icon="✅")
+            st.balloons()
+        except Exception as e:
+            st.error(f"Error: {e}")
+    else:
+        st.warning("Verifica el código y que la cantidad sea mayor a 0.")
+
+# --- HISTORIAL ---
+st.divider()
+st.subheader("📋 Últimos registros")
+try:
+    historial = conn.read(spreadsheet=URL_HOJA, worksheet="Hoja1", ttl=0)
+    st.dataframe(historial.iloc[::-1], use_container_width=True, hide_index=True)
+except:
+    st.write("Sin movimientos aún.")
