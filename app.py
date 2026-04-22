@@ -1,15 +1,64 @@
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
 import pandas as pd
+from datetime import datetime
+from streamlit_gsheets import GSheetsConnection
 
+st.set_page_config(page_title="Sistema de Pedidos", page_icon="📝")
+
+st.title("📝 Registro de Pedidos")
+
+# URL de tu hoja (la misma que pusiste en Secrets)
+URL_HOJA = "https://docs.google.com/spreadsheets/d/1zc4xSypiN1mmDZghgrCmn2ItzZVjLYBsUxw1VHetIB8/edit?pli=1#gid=0"
+
+# Establecer conexión
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# Para leer:
-df = conn.read()
+# Formulario de entrada
+with st.form("nuevo_pedido"):
+    st.subheader("Datos del Pedido")
+    solicitante = st.text_input("Nombre del Solicitante")
+    material = st.text_input("Material solicitado")
+    cantidad = st.number_input("Cantidad", min_value=1, step=1)
+    prioridad = st.selectbox("Prioridad", ["Baja", "Media", "Alta"])
+    
+    submit = st.form_submit_button("Guardar Pedido")
 
-# Para guardar (en el botón de tu formulario):
-if boton_pedido:
-    # ... (tu lógica de crear nuevo_df) ...
-    df_final = pd.concat([df, nuevo_df], ignore_index=True)
-    conn.update(data=df_final)
-    st.success("¡Guardado con éxito!")
+    if submit:
+        if solicitante and material:
+            nuevo_dato = pd.DataFrame([{
+                "Fecha": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                "Solicitante": solicitante,
+                "Material": material,
+                "Cantidad": cantidad,
+                "Prioridad": prioridad
+            }])
+
+            try:
+                # 1. Leer datos existentes (Pasamos la URL aquí para evitar el ValueError)
+                df_existente = conn.read(spreadsheet=URL_HOJA)
+                
+                # 2. Combinar con el nuevo
+                df_actualizado = pd.concat([df_existente, nuevo_dato], ignore_index=True)
+                
+                # 3. Subir a Google Sheets
+                conn.update(spreadsheet=URL_HOJA, data=df_actualizado)
+                
+                st.success("✅ ¡Guardado en Drive con éxito!")
+                st.balloons()
+            except Exception as e:
+                st.error(f"Error al guardar: {e}")
+        else:
+            st.warning("Por favor rellena todos los campos.")
+
+# --- MOSTRAR TABLA ---
+st.divider()
+st.subheader("📋 Pedidos en la Base de Datos")
+try:
+    # Leer para mostrar (también pasando la URL)
+    datos = conn.read(spreadsheet=URL_HOJA)
+    if not datos.empty:
+        st.dataframe(datos.iloc[::-1], use_container_width=True, hide_index=True)
+    else:
+        st.info("La base de datos está vacía.")
+except Exception as e:
+    st.info("Aún no hay datos registrados o la hoja no es accesible.")
