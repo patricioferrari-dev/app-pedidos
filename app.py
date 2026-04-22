@@ -6,7 +6,7 @@ st.set_page_config(page_title="Control de Stock Fijo", layout="centered")
 
 # --- 1. TU CATÁLOGO (Debe coincidir con la columna "Artículo" de tu Excel) ---
 CATALOGO = {
-    "4011": "Tarugo de 8mm para ladrillo hueco",
+    "30032": "Tarugo de 8mm para ladrillo hueco",
     "012009U": "Fuentes 12V-1,5A para decos UHF Inspur Model STB STB-6755TI",
     "13008": "CONTROL REMOTO PARA DECO SAGECOM DCWMI303. CON BOTONES YT + NETFLIX",
     "13012": "CONTROL REMOTO POR VOZ PARA DECO SAGEMCOM V2",
