@@ -34,13 +34,13 @@ with st.form("nuevo_pedido"):
             }])
 
             try:
-                # 1. Leer datos existentes (Pasamos la URL aquí para evitar el ValueError)
-                df_existente = conn.read(spreadsheet=URL_HOJA)
+                # 1. Leer datos existentes
+                df_existente = conn.read(spreadsheet=URL_HOJA, ttl=0) # ttl=0 evita que use datos viejos de memoria
                 
                 # 2. Combinar con el nuevo
                 df_actualizado = pd.concat([df_existente, nuevo_dato], ignore_index=True)
                 
-                # 3. Subir a Google Sheets
+                # 3. Subir a Google Sheets (Aquí es donde daba el error)
                 conn.update(spreadsheet=URL_HOJA, data=df_actualizado)
                 
                 st.success("✅ ¡Guardado en Drive con éxito!")
