@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 from streamlit_gsheets import GSheetsConnection
 
-st.set_page_config(page_title="Control de Stock Inteligente", layout="wide")
+st.set_page_config(page_title="Control de Stock Vertical", layout="centered")
 
 # --- 1. TU CATÁLOGO DE PRODUCTOS ---
 CATALOGO = {
@@ -18,35 +18,30 @@ URL_HOJA = "https://docs.google.com/spreadsheets/d/1zc4xSypiN1mmDZghgrCmn2ItzZVj
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-st.title("📦 Sistema de Inventario con Lógica de Stock")
+st.title("📦 Gestión de Inventario")
 
-# --- FILA SUPERIOR: FECHA Y TIPO ---
+# --- SECCIÓN DE ENTRADA VERTICAL ---
+st.subheader("Registrar Movimiento")
+
+# 1. Fecha (Informativa)
 fecha_hoy = datetime.now().strftime("%d/%m/%Y %H:%M")
-col_f1, col_f2 = st.columns([1, 1])
+st.write(f"📅 **Fecha:** {fecha_hoy}")
 
-with col_f1:
-    st.write(f"📅 **Fecha Automática:** {fecha_hoy}")
+# 2. Tipo de Movimiento
+tipo_movimiento = st.selectbox(
+    "Seleccione el tipo de movimiento:",
+    [
+        "Pedido de materiales", 
+        "Devolución", 
+        "Devolución por fallas", 
+        "Otros"
+    ]
+)
 
-with col_f2:
-    tipo_movimiento = st.selectbox(
-        "Tipo de movimiento",
-        [
-            "Pedido de materiales", 
-            "Devolución", 
-            "Devolución por fallas", 
-            "Otros"
-        ],
-        label_visibility="collapsed"
-    )
+# 3. Código
+codigo_input = st.text_input("Código del Producto:", placeholder="Ej: 30032").strip()
 
-st.markdown("---")
-
-# --- FILA DE CARGA: CODIGO, DESCRIPCION, CANTIDAD Y BOTON ---
-c1, c2, c3, c4 = st.columns([2, 4, 1.5, 1.5])
-
-with c1:
-    codigo_input = st.text_input("Código", placeholder="Escribe el código...").strip()
-
+# Lógica de detección
 descripcion_detectada = ""
 producto_valido = False
 
@@ -57,35 +52,34 @@ if codigo_input:
     else:
         descripcion_detectada = "❌ Código no encontrado"
 
-with c2:
-    st.text_input("Descripción", value=descripcion_detectada, disabled=True)
+# 4. Descripción (Auto-completada)
+st.text_input("Descripción:", value=descripcion_detectada, disabled=True)
 
-with c3:
-    cantidad_input = st.number_input("Cantidad", min_value=0, step=1)
+# 5. Cantidad
+cantidad_input = st.number_input("Cantidad a ingresar:", min_value=0, step=1)
 
-with c4:
-    st.write(" ") 
-    boton_cargar = st.button("📥 Cargar", use_container_width=True)
+# 6. Botón de Carga (Ancho total)
+st.write("") # Espacio
+boton_cargar = st.button("📥 Cargar Registro", use_container_width=True)
 
 # --- LÓGICA DE PROCESAMIENTO Y GUARDADO ---
 if boton_cargar:
     if producto_valido and cantidad_input > 0:
         
-        # LÓGICA DE SIGNOS:
-        # Si es devolución por fallas, lo guardamos como negativo para que reste al sumar la columna
+        # Lógica de signos
         cantidad_final = cantidad_input
         if tipo_movimiento == "Devolución por fallas":
             cantidad_final = cantidad_input * -1
-            mensaje_exito = f"📉 Descuento registrado: {descripcion_detectada} ({cantidad_final})"
+            mensaje_exito = f"📉 Descuento: {descripcion_detectada} ({cantidad_final})"
         else:
-            mensaje_exito = f"📈 Ingreso registrado: {descripcion_detectada} (+{cantidad_final})"
+            mensaje_exito = f"📈 Ingreso: {descripcion_detectada} (+{cantidad_final})"
 
         nuevo_registro = pd.DataFrame([{
             "Fecha": fecha_hoy,
             "Tipo": tipo_movimiento,
             "Codigo": codigo_input,
             "Descripcion": descripcion_detectada,
-            "Cantidad": cantidad_final  # Aquí se guarda con el signo correcto
+            "Cantidad": cantidad_final
         }])
         
         try:
@@ -97,30 +91,30 @@ if boton_cargar:
             
             st.toast(mensaje_exito, icon="🚀")
             if cantidad_final < 0:
-                st.warning(f"Se han descontado {cantidad_input} unidades por falla.")
+                st.warning(f"Se han descontado {cantidad_input} unidades.")
             else:
                 st.success(f"Se han sumado {cantidad_input} unidades.")
             
             st.rerun() 
         except Exception as e:
-            st.error(f"Error al conectar: Revisa que la pestaña se llame 'Hoja1'")
+            st.error(f"Error al conectar con la hoja 'Hoja1'")
     else:
         if not producto_valido and codigo_input:
-            st.warning("⚠️ Código inválido.")
+            st.warning("⚠️ El código no existe en el catálogo.")
         elif cantidad_input <= 0:
-            st.warning("⚠️ Cantidad debe ser mayor a 0.")
+            st.warning("⚠️ La cantidad debe ser mayor a 0.")
 
-# --- TABLA DE ÚLTIMOS MOVIMIENTOS ---
-st.subheader("📋 Historial de Movimientos")
+# --- SECCIÓN DE HISTORIAL Y MÉTRICAS ---
+st.markdown("---")
 try:
     historial = conn.read(spreadsheet=URL_HOJA, worksheet="Hoja1", ttl=0)
     if not historial.empty:
-        # Aplicamos un estilo visual: cantidades negativas en rojo (opcional)
-        st.dataframe(historial.iloc[::-1].head(10), use_container_width=True, hide_index=True)
-        
-        # EXTRA: Cálculo de Stock Total del producto actual
+        # Stock Actual destacado
         if producto_valido:
             stock_total = historial[historial["Codigo"] == codigo_input]["Cantidad"].sum()
             st.metric(label=f"Stock Actual de {descripcion_detectada}", value=int(stock_total))
+        
+        st.subheader("📋 Últimos 10 Movimientos")
+        st.dataframe(historial.iloc[::-1].head(10), use_container_width=True, hide_index=True)
 except:
     pass
